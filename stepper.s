@@ -159,24 +159,29 @@ stepper_timer2_init	PROC
 			LDR		R0, [R1,R2]
 			BIC		R0, #0x01
 			STR		R0, [R1,R2]
-			
 			;select16 bit timer
 			LDR		R2, =TIMER_CFG
 			MOV		R0, #0x04 ;16 bit mode
 			STR		R0, [R1,R2]
-			;
+
+			
 			LDR 	R2, =TIMER_TAMR
-			MOV 	R0, #0x02 ; set to periodic, count down 
+			mov 	R0, #0x02 ; set to periodic, count down 
 			STR 	R0, [R1,R2]
 			;
+						;
+			LDR 	R2, =TIMER_TAILR ; load value, 
+			LDR 	R0, =10000
+			STR		R0, [R1,R2];
+			
 			LDR		R2, =TIMER_TAPR
 			MOV		R0, #79 	;prescaler 79, get 1us count interval 
 			STR		R0, [R1,R2]
 			
-			;
-			LDR 	R2, =TIMER_TAILR ; load value, 
-			LDR 	R0, =10000
+			LDR		R2, =TIMER_TAMATCHR
+			MOV		R0, #0
 			STR		R0, [R1,R2]
+
 			;
 			LDR		R2, =TIMER_IMR ; enable timeout interrupt
 			MOV 	R0, #0x01
@@ -187,7 +192,7 @@ stepper_timer2_init	PROC
 			LDR		R1, =NVIC_BASE
 			LDR		R2, =NVIC_PRI5
 			LDR		R0, [R1,R2]
-			LDR		R3, =0x70000000 ;priorty 7
+			LDR		R3, =0x30000000 ;priorty 3
 			ORR		R0,R3
 			STR		R0, [R1,R2]
 			
@@ -201,7 +206,7 @@ stepper_timer2_init	PROC
 			ldr		R1, =TIMER2
 			LDR		R2, =TIMER_CTL
 			LDR		R0, [R1,R2]
-			ORR		R0, #0x01
+			ORR		R0, #0x03
 			STR		R0, [R1,R2] 
 			
 			POP		{R0-R3}
@@ -227,7 +232,7 @@ stepper_timer2_setSpeed	PROC
 				;ENABLE timers
 				LDR		R2, =TIMER_CTL
 				LDR		R0, [R1,R2]
-				ORR		R0, #0x01
+				ORR		R0, #0x03
 				STR		R0, [R1,R2]
 				
 				POP		{R0-R2}
@@ -269,10 +274,23 @@ _gsh_done		LDR	R1,=PortF_BASE
 stepper_timer2_isr	PROC
 		
 		LDR		R1, =TIMER2
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		BIC		R0, #0x1
+		STR		R0, [R1,R2]
 		LDR		R2, =TIMER_ICR
 		LDR		R0, [R1,R2]
 		ORR		R0,	#0x1
 		STR		R0, [R1,R2]
+		
+		
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		ORR		R0, #0x1
+		STR		R0, [R1,R2]
+		
+		LDR		R2, =TIMER_RIS
+		LDR		R0, [R1,R2]
 		
 		LDR		R1, =STEPPER_DIR_ADDR
 		LDRB	R3, [R1]
@@ -293,12 +311,12 @@ CW		CMP		R0, #0x00
 		LSR		R0, #1
 		STR		R0, [R1,R2]
 		B		done
-CCW		CMP		R0, #0x00
+
+CCW		CMP		R0, #0x08
 		MOVEQ	R0, #0x01
-		CMP		R0, #0X10
-		MOVEQ	R0, #0X01
-		LSL		R0, #1
-		STR		R0, [R1,R2]
+		STREQ	R0, [R1,R2]
+		LSLNE	R0, #1
+		STRNE	R0, [R1,R2]
 		B		done
 done	BX		LR
 	

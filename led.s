@@ -3,6 +3,8 @@
 			THUMB
 			GET		address.s
 			EXPORT	led_init
+			EXPORT	led_pwm_write
+			EXPORT 	turnOffTimer
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;	
 ;default gpio output initilization for f1,f2,f3
@@ -86,12 +88,12 @@ led_timer_pwm_init	PROC
 			STR 	R0, [R1,R2]
 			;
 			LDR 	R2, =TIMER_TBILR ; initialize match clocks
-			LDR 	R0, =1000
+			LDR 	R0, =0xffff
 			STR		R0, [R1,R2]
 			
 			LDR		R2, =TIMER_TBMATCHR
-			LDR		R0, =300
-			STR		R0, [R1]
+			LDR		R0, =0x6000
+			STR		R0, [R1,R2]
 			;enable
 			LDR		R2, =TIMER_CTL
 			LDR		R0, [R1,R2]
@@ -124,10 +126,10 @@ led_timer_pwm_init	PROC
 			STR		R0, [R1,R2]
 			
 			LDR		R2, =TIMER_TAMATCHR
-			LDR		R0, =0x7fff
+			LDR		R0, =LED_DEFAULT_BRGHTNESS
 			STR		R0, [R1,R2]
 			LDR		R2, =TIMER_TBMATCHR
-			LDR		R0, =0x7fff
+			LDR		R0, =LED_DEFAULT_BRGHTNESS
 			STR		R0, [R1,R2]
 			
 		
@@ -142,23 +144,125 @@ led_timer_pwm_init	PROC
 			ENDP
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;pwm_write	@param r1=timer address, r4 = a,b select r3, pwm val
+;pwm_write	@param r0: led select (r,g,b) = (0,1,2), r5: pwm val 
 led_pwm_write	PROC
-			PUSH	{R0-R2}
-			LDR		R2, =TIMER_CTL
-			LDR		R0,[R1,R2]
-			BIC		R0, #0x03
-			STR		R0,[R1,R2]
-			CMP		R4, #0  ;TIMER A
-			LDREQ	R2,	=TIMER_TAILR
-			CMP		R4, #1
-			LDREQ	R2, =TIMER_TBILR
-			STR		R3, [R1,R2]
-			LDR		R2, =TIMER_CTL
-			LDR		R0, [R1,R2]
-			ORR		R0, #0x03
-			STR		R0, [R1,R2]
-			POP		{R0-R2}
-			BX		LR
-			ENDP
+		PUSH	{R0-R2}
+		LDR		R1, =0xffff
+		AND		R5, R1
+		sub		r5, r1, r5
+		CMP		R0, #0
+		BEQ		RED
+		CMP		R0, #1
+		BEQ		GREEN
+		CMP		R0, #2
+		BEQ		BLUE
+		B		DONE
+		
+RED		LDR		R1, =TIMER0
+			;disable timers B
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		BIC		R0, #0x100
+		STR		R0, [R1,R2]
+		
+		LDR		R2, =TIMER_TBMATCHR
+		MOV		R0, R5
+		STR		R0, [R1,R2]
+		
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		ORR		R0, #0x100
+		STR		R0, [R1,R2]
+		
+		PUSH	{LR}
+		LDR		R1, =TIMER1
+		MOV		R0, #0
+		BL		turnOffTimer
+		MOV		R0, #1
+		BL		turnOffTimer
+		POP		{LR}
+		B		DONE
+
+GREEN	LDR		R1, =TIMER1
+			;disable timers B
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		BIC		R0, #0x100
+		STR		R0, [R1,R2]
+		
+		LDR		R2, =TIMER_TBMATCHR
+		MOV		R0, R5
+		STR		R0, [R1,R2]
+		
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		ORR		R0, #0x100
+		STR		R0, [R1,R2]
+		
+		PUSH	{LR}
+		LDR		R1, =TIMER0
+		MOV		R0, #1
+		BL		turnOffTimer
+		LDR		R1, =TIMER1
+		MOV		R0, #0
+		BL		turnOffTimer
+		POP		{LR}
+		B		DONE
+
+BLUE	LDR		R1, =TIMER1
+			;disable timers B
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		BIC		R0, #0x001
+		STR		R0, [R1,R2]
+		
+		LDR		R2, =TIMER_TAMATCHR
+		MOV		R0, R5
+		STR		R0, [R1,R2]
+		
+		LDR		R2, =TIMER_CTL
+		LDR		R0, [R1,R2]
+		ORR		R0, #0x001
+		STR		R0, [R1,R2]
+		
+		PUSH	{LR}
+		LDR		R1, =TIMER0
+		MOV		R0, #1
+		BL		turnOffTimer
+		LDR		R1, =TIMER1
+		BL		turnOffTimer
+		
+		POP		{LR}
+		B		DONE
+DONE	POP		{R0-R2}	
+		BX		LR
+		ENDP
+;****************************************;
+;R1= timer addres , r0: (A,B)= (0,1)
+turnOffTimer PROC
+	PUSH	{R0-R4}
+	CMP		R0,#2
+	BHS		disableDone
 	
+disableA
+	LDR		R2, =TIMER_CTL
+	LDR		R3, [R1,R2]
+	LDR		R4, =0x101
+	BIC		R3, R4
+	STR		R3, [R1,R2]
+	CMP		R0, #0
+	LDREQ	R2, =TIMER_TAMATCHR
+	LDRNE	R2, =TIMER_TBMATCHR
+	LDR		R3, =0xfffe
+	STR		R3, [R1,R2]
+	LDR		R2, =TIMER_CTL
+	LDR		R3, [R1,R2]
+	LDR		R4, =0X101
+	ORR		R3, R4
+	STR		R3, [R1,R2]
+	B		disableDone
+disableDone	
+	POP		{R0-R4}
+	BX		LR
+	ENDP
+	END

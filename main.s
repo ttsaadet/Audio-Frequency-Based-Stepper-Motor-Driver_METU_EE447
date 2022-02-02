@@ -1,6 +1,4 @@
-AMP_THRESH_ADDR  EQU  0x20000900
-FREQUENCY_THRESH_ADDR	EQU	0x20000904 ;high two byte high frq th, low two byte holds low freq th
-	
+
 
 		AREA 	main, CODE, READONLY
 		THUMB
@@ -15,24 +13,28 @@ FREQUENCY_THRESH_ADDR	EQU	0x20000904 ;high two byte high frq th, low two byte ho
 		EXTERN	stepper_timer2_setSpeed
 		;
 		EXTERN  led_init
-		EXTERN	pwm_write
+		EXTERN  led_pwm_write
+		EXTERN turnOffTimer
 		EXTERN	delay1s	
 		EXTERN 	clock_configure
 		;varaible pointer extern; 
 		EXTERN	arm_cfft_sR_q15_len256
 		
+		EXTERN	CNVRT
+		EXTERN	OutStr
+		
 		
 		EXPORT 	__main
 			
 __main	PROC
-		BL		clock_configure
+		;BL		clock_configure
 		BL		adc_init
 		BL		led_init
-		BL		stepper_sw_init
-		BL		stepper_out_init
+		;BL		stepper_sw_init
+		;BL		stepper_out_init
 		
 		BL		systic_init
-		BL		stepper_timer2_init
+		;BL		stepper_timer2_init
 		
 		MOV		R7, #0
 		
@@ -41,72 +43,111 @@ start	CMP		R10, #1
 		MOV		R10, #0
 		
 		
+		ldr		R1, =STCTRL
+		ldr		r0, [r1]
+		bic		r0, #0x1
+		str		r0, [r1]
 		LDR		R0, =arm_cfft_sR_q15_len256
 		LDR		R1,	=MIC_SAMPLE_DATA_ADDR
 		MOV		R2, #0
-		MOV		R3, #0
+		MOV		R3, #1
 		BL		arm_cfft_q15
 		BL		findMax
-;		LDR		R1, =AMP_THRESH_ADDR
-;		CMP		R2, R1 ;IF MAX AMP > AMP TH THEN TURN ON LEDS
+		
+		
+		ldr		R1, =STCTRL
+		ldr		r0, [r1]
+		orr		r0, #0x1
+		str		r0, [r1]
+		;LDR		R1, =AMP_TH_ADDR_POT3
+		;LDR		R0, [R1]
+		
+		BL	AdjustLeds
+
+		;CMP		R2, R1 ;IF MAX AMP > AMP TH THEN TURN ON LEDS
 ;		BLHS	turnOnLeds
 		;BLHS	confStepper
+		
 		B		start
 		ENDP
+			
+			
+			
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;findMax; @param R1 data start address , @return r2 = max amplitude ,r3 = (dom freq)
+;findMax; @param: none, @return r5 = max amplitude ,r6 = (dom freq)
 findMax	PROC
-		PUSH	{R0,R1,R5, R6}
+		PUSH	{R0-R4,R7, R10,R9}
 		ldr		r1, =MIC_SAMPLE_DATA_ADDR
 		mov		R0, #0
 		mov		R2, #0
+		mov		r5 ,#0
 		mov		r6, #0
-_start	ADD		R6, #1
+
+_start	ADD		R7, #1
 		
-		CMP		R0, #0x200
+		CMP		R7, #128
 		BEQ		_done
-		LDR		R5, [R1,R0]
-		ADD		R0, #4
-		LDR		R7, =0xffff;
-		AND		R7,	R5;real part
-		MUL		R7, R7
-		LSR		R8, R5, #16; imaginarty part
-		MUL		R8, R8; 
-		ADD		R5, R7,R8 ;R5 MAGNITUDE
-		CMP		R5, R2
-		MOVHS	R2,	R5	;if read > prev read then update max value
-		MOVHS	R3, R6	;if read > prev read then update max index
+		LDR		R0, [R1,R2]
+		ADD		R2, #4
+		LDR		R8, =0xffff;
+		AND		R8, R0     ;real part
+		SMULBB	R3, R8, R8 ;r3: real^2 
+		LSR		R9, R0, #16; imaginarty part
+		SMULBB	R4, R9, R9; 
+		ADD		R3, R4 ;R3: =  R3: reel^2, r4: im^2
+		CMP		R3, R5
+		MOVHS	R5,	R3	;if read > prev read then update max value
+		MOVHS	R6, R7	;if read > prev read then update max index
 		
 		B		_start
 _done	LDR		R1, =2000 ;2000 sampling frequency
-		MUL		R3,R1    ;
+		MUL		R6,R1    ;
 		LDR		R1, =256
-		UDIV	R3,R1	;R3 HOLDS FREKANS
-				POP		{R0,R1,R5, R6}
+		UDIV	R6,R1	;R6 HOLDS FREKANS
+		LSR		R5, #10 ;magnitude
+		POP		{R0-R4,R7, R8,R9}
 		BX		LR
 		ENDP
 			
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;turnOnLeds @param r1: frequency
-turnOnLeds	PROC
-			PUSH	{R0-R3}
-			LDR		R0,=FREQUENCY_THRESH_ADDR
-			LDR		R2, [R0]
-			LDR		R0, =0xffff
-			AND		R3, R2, R0 ;r3 low freq th
-			LSR		R2, #16	;r2 high freq th
-			CMP		R1, R3
+;turnOnLeds @param r5: amplitude, r6, frekans 
+AdjustLeds	PROC
+			PUSH	{R0-R3,LR}
+		
+			MOV		R0, #500
+			CMP		R0, R5 
+			BHS		_turnoff
+			MOV		R0, #250; LOW FREQ 
+			CMP		R6, R0
 			BHS		_higher ;higher than low th
 			BLS		_lower
-_lower		;todo 	turn on red
+_lower		MOV		R0, #0 ;SELECET RED
+			LSL		R5, #3
+			BL		led_pwm_write
 			B		_doneLed
-_higher		CMP		R1, R2
+
+_higher		MOV		R0, #600 ; HIGH GREQ
+			CMP		R6, R0
 			BLS		_inBetween
-			;todo  	turn on blue
+			MOV		R0, #2 ; SLECET BLUE
+			LSL		R5, #3
+			BL		led_pwm_write
 			B		_doneLed
-_inBetween	;todo 	turn on green
+_inBetween	
+			MOV		R0, #1	; SELECT GREEN
+			LSL		R5, #3
+			BL		led_pwm_write
 			B		_doneLed
-_doneLed	POP		{R0-R3}
+_turnoff	LDR		R1, =TIMER0
+			MOV		R0,	#1 ;timer0 b off
+			BL		turnOffTimer
+			LDR		R1, =TIMER1
+			MOV		R0,	#0 ;timer1 a off
+			BL		turnOffTimer
+			LDR		R1, =TIMER1
+			MOV		R0,	#1 ;timer1 b off
+			BL		turnOffTimer
+_doneLed	POP		{R0-R3,LR}
 			BX		LR
 			ENDP
 				

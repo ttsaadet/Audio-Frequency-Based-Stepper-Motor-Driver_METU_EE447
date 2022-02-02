@@ -38,14 +38,14 @@ adc_init	PROC
 			bic		r0, #0x0f  
 			str		r0, [r1, r2]
 			
-			;No Alternative function 
+			;Alternative function 
 			ldr		r2, =GPIO_AFSEL
 			ldr		r0, [r1,r2]
 			orr		r0, #0x0f ;
 			str		r0, [r1, r2]
 			
 					
-			;disable digital for E3
+			;disable digital 
 			LDR		r2, =GPIO_DEN
 			LDR		r0, [r1, r2]
 			BIC		r0, #0x0f
@@ -60,9 +60,9 @@ adc_init	PROC
 			ldr		r1, =ADC0_BASE
 			;disable sequence2 sampler for conf
 			ldr		r2, =ADCACTSS
-			ldr		r0, [r1,r2]
+			ldr		r0, [r1]
 			bic		r0, #0x04
-			str		r0, [r1,r2]
+			str		r0, [r1]
 			
 
 			
@@ -79,13 +79,13 @@ adc_init	PROC
 			
 			;enable interrupt and set end0 bit
 			ldr		r2, =ADCSSCTL2
-			ldr		r0, [r1,r2]
-			mov		r0, #0x6000
+			;ldr		r0, [r1,r2]
+			mov		r0, #0x0006
 			str		r0, [r1,r2]
 			
-			;125ksps
+			;500ksps
 			ldr		r2, =ADCPC
-			mov		r0, #0x01
+			mov		r0, #0x05
 			str		r0, [r1,r2]
 			
 			ldr		r2, =ADCIM
@@ -111,8 +111,7 @@ adc_init	PROC
 			;enable adC
 			ldr		r1, =ADC0_BASE
 			ldr		r2, =ADCACTSS
-			ldr		r0, [r1,r2]
-			orr		r0, #0x04 ;enable seq2
+			mov		r0, #0x04 ;enable seq2
 			str		r0, [r1,r2]
 			
 			ldr		r1, =MIC_SAMPLE_OFSET_ADDR
@@ -138,21 +137,23 @@ adc_isr_handler	PROC
 				mov		r12, #0 		;read cycle for multiple adc in
 _readFifo		ldr		r2, = ADCSSFIFO2
 				ldr		r0, [r1,r2]		;r0 has 12 bit value 
-				add 	r12, #1
-				cmp		r12, #1
-				beq		_strMic
-				cmp		r12, #2
-				beq		_strPot1
-				cmp		r12, #3
-				beq		_strPot2
-				cmp		r12, #4
-				bne		_readFifo
-				mov		r12, #0 
-				b		_strPot3
-				b		done
+;				add 	r12, #1
+;				cmp		r12, #1
+;				beq		_strMic
+;				cmp		r12, #2
+;				beq		_strPot1
+;				cmp		r12, #3
+;				beq		_strPot2
+;				cmp		r12, #4
+;				bne		_readFifo
+;				mov		r12, #0 
+;				b		_strPot3
+;				b		done
 _strMic			ldr		r2, =MIC_ADC_OFFSET
 				sub		r0, r2
 				lsl		r0, #4
+				ldr		r2, =0xffff0000
+				bic		r0, r2
 				ldr		r2, =MIC_SAMPLE_DATA_ADDR;
 				str		r0, [r2,r11] ;store value
 				
@@ -160,14 +161,14 @@ _strMic			ldr		r2, =MIC_ADC_OFFSET
 				cmp		r11, #0x400
 				moveq	r11, #0
 				moveq	r10, #1
-				b		_readFifo
-_strPot1		ldr		r2, =POT1_SAMPLE_ADDR
+				b		done
+_strPot1		ldr		r2, =LOW_FREQ_TH_ADDR_POT1
 				str		r0, [r2]
 				b		_readFifo
-_strPot2		ldr		r2, =POT2_SAMPLE_ADDR
+_strPot2		ldr		r2, =HIGH_FREQ_TH_ADDR_POT2
 				str		r0, [r2]
 				b		_readFifo
-_strPot3		ldr		r2, =POT3_SAMPLE_ADDR
+_strPot3		ldr		r2, =AMP_TH_ADDR_POT3
 				str		r0, [r2]
 				b		done
 done			bx	lr		
