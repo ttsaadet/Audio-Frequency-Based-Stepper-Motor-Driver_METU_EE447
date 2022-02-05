@@ -83,6 +83,7 @@ __heap_limit
 		IMPORT systic_handler
 		IMPORT stepper_sw_gpio_isr
 		IMPORT stepper_timer2_isr
+		IMPORT lcd_update_isr
 		IMPORT	adc_isr_handler
 ;******************************************************************************
 ;
@@ -494,8 +495,8 @@ GPIOPortG_Handler
 GPIOPortH_Handler
 UART2_Handler
 SSI1_Handler
-Timer3A_Handler
-Timer3B_Handler
+Timer3A_Handler		B		lcd_update_isr
+Timer3B_Handler		B		. 
 I2C1_Handler
 Quadrature1_Handler
 CAN0_Handler
