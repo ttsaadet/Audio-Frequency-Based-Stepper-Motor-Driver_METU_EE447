@@ -147,6 +147,7 @@ led_timer_pwm_init	PROC
 ;pwm_write	@param r0: led select (r,g,b) = (0,1,2), r5: pwm val 
 led_pwm_write	PROC
 		PUSH	{R0-R2}
+		LSL		R5, #3
 		LDR		R1, =0xffff
 		AND		R5, R1
 		sub		r5, r1, r5

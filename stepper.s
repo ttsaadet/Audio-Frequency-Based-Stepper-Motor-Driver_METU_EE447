@@ -171,11 +171,11 @@ stepper_timer2_init	PROC
 			;
 						;
 			LDR 	R2, =TIMER_TAILR ; load value, 
-			LDR 	R0, =10000
+			LDR 	R0, =STEPPER_DEFAULT_SPEED
 			STR		R0, [R1,R2];
 			
 			LDR		R2, =TIMER_TAPR
-			MOV		R0, #79 	;prescaler 79, get 1us count interval 
+			MOV		R0, #15 	;prescaler 79, get 1us count interval 
 			STR		R0, [R1,R2]
 			
 			LDR		R2, =TIMER_TAMATCHR
@@ -192,7 +192,7 @@ stepper_timer2_init	PROC
 			LDR		R1, =NVIC_BASE
 			LDR		R2, =NVIC_PRI5
 			LDR		R0, [R1,R2]
-			LDR		R3, =0x30000000 ;priorty 3
+			LDR		R3, =0x10000000 ;priorty 3
 			ORR		R0,R3
 			STR		R0, [R1,R2]
 			
@@ -215,10 +215,13 @@ stepper_timer2_init	PROC
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;timer2_setSpeed adjust interrupt interval @param r4 in uS @return :none
+;timer2_setSpeed adjust interrupt interval @param r4 in hz @return :none
 stepper_timer2_setSpeed	PROC
 				PUSH	{R0-R2}
-
+				LDR		R1, =STEPPER_DEFAULT_SPEED
+				MOV		R0,	#15
+				MUL		R4,R0
+				SUB		R4, R1, R4
 				LDR		R1, =TIMER2
 				;disable timers
 				LDR		R2, =TIMER_CTL
@@ -289,8 +292,6 @@ stepper_timer2_isr	PROC
 		ORR		R0, #0x1
 		STR		R0, [R1,R2]
 		
-		LDR		R2, =TIMER_RIS
-		LDR		R0, [R1,R2]
 		
 		LDR		R1, =STEPPER_DIR_ADDR
 		LDRB	R3, [R1]

@@ -207,7 +207,7 @@ lcd_setup PROC
 		;chip select low
 		LDR		R1, =PortA_BASE
 		LDR		R2, =LCD_CS_ADDR_A3
-		MOV		R0,	0x00
+		MOV		R0,	#0x00
 		STR		R0, [R1,R2]
 		
 		;function set
@@ -240,7 +240,7 @@ lcd_setup PROC
 lcd_create_table	PROC
 		PUSH	{LR,R3,R4}
 		BL		lcd_print_reset	
-		MOV		R5, 0
+		MOV		R5, #0
 		MOV		R4, #1 ; use ssi_send in address mode
 		LDR		R3, =STR_MAG
 		BL		ssi_send
@@ -313,7 +313,7 @@ lcd_print_reset	PROC
 		mov		r3, #0
 wFifoReset LDR		R2, =SSISR
 		LDR		R0, [R1,R2]
-		ANDS	R0,	 0x1 ; check tfe flag 
+		ANDS	R0,	#0x1 ; check tfe flag 
 		BEQ		wFifoReset
 		LDR		R2, =SSIDR
 		STRB	R3, [R1,R2]
@@ -389,7 +389,7 @@ load_	LDR		R0, [R1] ,#1
 ;********************************************
 ;SPI send routine @param: r3 = one byte data (r4 = 0) , or start address (r4 = 1), @param r4: mode type
 ssi_send	PROC
-		PUSH 	{LR,R0-R2}
+		PUSH 	{LR,R0-R4}
 		;chip select low
 		LDR		R1, =SSI0
 		CMP	R4, #1
@@ -398,7 +398,7 @@ ssi_send	PROC
 byte_mode		
 wFifoB	LDR		R2, =SSISR
 		LDR		R0, [R1,R2]
-		ANDS	R0,	 0x1 ; check tfe flag 
+		ANDS	R0,	#0x1 ; check tfe flag 
 		BEQ		wFifoB
 		LDR		R2, =SSIDR
 		MOV		R0, R3
@@ -407,7 +407,7 @@ wFifoB	LDR		R2, =SSISR
 address_mode
 wFifoA	LDR		R2, =SSISR
 		LDR		R0, [R1,R2]
-		ANDS	R0,	 0x1 ; check tfe flag 
+		ANDS	R0,	#0x1 ; check tfe flag 
 		BEQ		wFifoA
 		LDRB	R0, [R3], #1
 		CMP		R0, #0xf
@@ -416,7 +416,7 @@ wFifoA	LDR		R2, =SSISR
 		STR		R0,	[R1,R2]
 		B		address_mode
 done
-		POP		{LR,R0-R2}
+		POP		{LR,R0-R4}
 		BX 		LR
 		ENDP
 
@@ -463,30 +463,39 @@ ssi_init	PROC
 ;converts hex number to decimal in char and prints to lcd 
 ;@param: R1= hex number to be printed @param: r5 row number
 print_digit	PROC
-		PUSH	{LR,R0-R3,R5}
+		PUSH	{LR,R0-R3,R5,R6}
+		MOV32	R2, #999
+		CMP		R1, R2
+		MOVHS	R1, #999 ;if larger than 999 make it 999
 		MOV		R6,#64
 		BL		lcd_align_cursor ;r5 row, r6 x pixel
-		MOV		R6, #0
+		MOV		R5, #0
+		MOV		R6, #3
 cnStart	MOV		R0, #10
 		SDIV	R2, R1, R0
 		MUL		R3, R2, R0
-		SUB		R4, R1, R3 ;R4 HOLDS DIGIT
+		SUB		R4, R1, R3 	;R4 HOLDS DIGIT
+		ORR		R5, R4		;r5 HOLDS BCD NUMBER
 		MOV		R1, R2
-		ADD		R6, #1
-		CMP		R6, #4
-		BEQ		cnDone
-		B		print
-print	PUSH	{R0-R4}
-		MOV		R0, #6
-		LDR		R3, =LCD_NUMBER_START_ADDR
-		MUL		R4, R6
-		ADD		R3, R4 ;R3 EFFECTIVE ADDRESS
-		MOV		R4,#1 ;USE SSI_SEND UN ADDRESSING MODE
-		BL		ssi_send
-		POP		{R0-R4}
+		SUBS	R6, #1
+		BEQ		cnPrint
+		LSL		R5, #4
 		B		cnStart
+cnPrint	
+		MOV		R6, #3
+		MOV		R0, #6
+cnLoop	LDR		R3, =LCD_NUMBER_START_ADDR
+		AND		R4, R5,	#0xf
+		LSR		R5,	#4
+		MUL		R4, R0
+		ADD		R3, R4 ;R3 EFFECTIVE ADDRESS
+		MOV		R4,#1  ;USE SSI_SEND UN ADDRESSING MODE
+		BL		ssi_send
+		SUBS	R6, #1
+		BEQ		cnDone
+		B		cnLoop
 cnDone	
-		POP		{LR,R0-R3,R5}
+		POP		{LR,R0-R3,R5,R6}
 		BX 	LR
 		ENDP		
 			END

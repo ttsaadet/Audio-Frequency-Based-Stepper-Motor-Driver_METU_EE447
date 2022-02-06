@@ -16,43 +16,39 @@
 		;
 		EXTERN  led_init
 		EXTERN  led_pwm_write
-		EXTERN turnOffTimer
+		EXTERN 	turnOffTimer
 		EXTERN	delay1s	
 		EXTERN 	clock_configure
 		;varaible pointer extern; 
 		EXTERN	arm_cfft_sR_q15_len256
-		
-		EXTERN	CNVRT
-		EXTERN	OutStr
-		EXTERN	ssi_send
+
 				
 		EXPORT 	__main
 			
 __main	PROC
-		;BL		clock_configure
 		BL		adc_init
 		BL		led_init
-		;BL		stepper_sw_init
-		;BL		stepper_out_init
+		BL		stepper_sw_init
+		BL		stepper_out_init
 		
 		BL		systic_init
-		;BL		stepper_timer2_init
+		BL		stepper_timer2_init
 		BL		lcd_init
 		
-		LDR		R1, =LOW_FREQ_TH_ADDR_POT1
-		MOV		R0, #250
-		STR		R0, [R1]
-		
-		
-		LDR		R1, =HIGH_FREQ_TH_ADDR_POT2
-		MOV32	R0, #600
-		STR		R0, [R1]
-		
-		
-		LDR		R1, =AMP_TH_ADDR_POT3
-		MOV32	R0, #500
-		STR		R0, [R1]
-		
+;		LDR		R1, =LOW_FREQ_TH_ADDR_POT1
+;		MOV		R0, #250
+;		STR		R0, [R1]
+;		
+;		
+;		LDR		R1, =HIGH_FREQ_TH_ADDR_POT2
+;		MOV32	R0, #600
+;		STR		R0, [R1]
+;		
+;		
+;		LDR		R1, =AMP_TH_ADDR_POT3
+;		MOV32	R0, #500
+;		STR		R0, [R1]
+;		
 		MOV		R7, #0
 		
 start	CMP		R10, #1
@@ -71,34 +67,43 @@ start	CMP		R10, #1
 		BL		arm_cfft_q15
 		BL		findMax
 		
-		
 		ldr		R1, =STCTRL
 		ldr		r0, [r1]
 		orr		r0, #0x1
 		str		r0, [r1]
-		;LDR		R1, =AMP_TH_ADDR_POT3
-		;LDR		R0, [R1]
 		
-		BL	AdjustLeds
+		MOV		R2, #0
+		LDR		R1, =LOW_FREQ_TH_ADDR_POT1_SUM
+		LDR		R0, [R1]
+		STR		R2, [R1]
+		LSR		R0,	#8
+		LDR		R1, =LOW_FREQ_TH_ADDR_POT1
+		STR		R0, [R1]
+		
+		LDR		R1, =HIGH_FREQ_TH_ADDR_POT2_SUM
+		LDR		R0, [R1]
+		STR		R2, [R1]
+		LSR		R0,	#8
+		LDR		R1, =HIGH_FREQ_TH_ADDR_POT2
+		STR		R0, [R1]
+		
+		LDR		R1, =AMP_TH_ADDR_POT3_SUM
+		LDR		R0, [R1]
+		STR		R2, [R1]
+		LSR		R0,	#8
+		LDR		R1, =AMP_TH_ADDR_POT3
+		STR		R0, [R1]
+		
+		
+		
+		BL		AdjustLeds
+		MOV		R4,R6
+		LDR		R1, =AMP_TH_ADDR_POT3
+		LDR		R0, [R1]
+		CMP		R5, R0
+		BLHS  	stepper_timer2_setSpeed
 
-		;CMP		R2, R1 ;IF MAX AMP > AMP TH THEN TURN ON LEDS
-;		BLHS	turnOnLeds
-		;BLHS	confStepper
-;		MOV		R3, #0x11
-;		bl		ssi_send
-
-;		LDR		R1, =SSI0
-;		LDR		R2,	=SSISR
-;		LDR		R0, [R1,R2]
-;		ANDS	R0, #8000
-;		BNE		readssi
-;		b		start
-;readssi	ldr		r2, =SSIDR
-;		LDR		R0, [R1,R2]
-		;ldr		r3, =CHAR_A
-		;MOV		R4, #1
-		;bl		ssi_send
-		B		start
+		BL		start
 		ENDP
 			
 			
@@ -112,7 +117,6 @@ findMax	PROC
 		mov		R2, #0
 		mov		r5 ,#0
 		mov		r6, #0
-
 _start	ADD		R7, #1
 		
 		CMP		R7, #128
@@ -128,7 +132,6 @@ _start	ADD		R7, #1
 		CMP		R3, R5
 		MOVHS	R5,	R3	;if read > prev read then update max value
 		MOVHS	R6, R7	;if read > prev read then update max index
-		
 		B		_start
 _done	LDR		R1, =2000 ;2000 sampling frequency
 		MUL		R6,R1    ;
@@ -137,7 +140,7 @@ _done	LDR		R1, =2000 ;2000 sampling frequency
 		LDR		R1, =CURRENT_FREQ_ADDR
 		STR		R6, [R1]
 		
-		LSR		R5, #10 ;magnitude
+		LSR		R5, #16 ;magnitude
 		LDR		R1, =CURRENT_AMP_ADDR
 		STR		R5, [R1]
 		POP		{R0-R4,R7, R8,R9}
