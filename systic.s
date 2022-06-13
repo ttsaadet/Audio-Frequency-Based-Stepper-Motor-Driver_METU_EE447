@@ -1,8 +1,5 @@
 
 
-STCTRL		EQU		0xE000E010
-STRELOAD	EQU		0xE000E014
-STCURRENT	EQU		0xE000E018
 
 				AREA	main, READONLY, CODE
 				THUMB
@@ -20,11 +17,11 @@ systic_init		PROC
 				MOV		R4, #0X00
 				STR		R4, [R5]
 				;genereate 2khz interrupt 
-				MOV32	R4, #40000
+				MOV32	R4, #1999
 				STR		R4, [R5, #4]
 				STR		R4, [R5, #8]
 				
-				MOV		R4, #0X07 
+				MOV		R4, #0x3 
 				STR		R4, [R5] ;enable systic
 	
 				POP		{R4-R7}

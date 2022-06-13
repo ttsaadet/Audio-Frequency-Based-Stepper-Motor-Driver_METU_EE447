@@ -5,10 +5,9 @@
 			THUMB
 			GET		address.s
 			EXPORT 	adc_init
-			EXPORT	adc_read
 			EXPORT  adc_isr_handler
-			
-
+			EXPORT 	adc_pot_init
+			EXPORT	adc_read_pot
 
 adc_init	PROC
 			push	{r0-r2}
@@ -38,14 +37,14 @@ adc_init	PROC
 			bic		r0, #0x0f  
 			str		r0, [r1, r2]
 			
-			;No Alternative function 
+			;Alternative function 
 			ldr		r2, =GPIO_AFSEL
 			ldr		r0, [r1,r2]
 			orr		r0, #0x0f ;
 			str		r0, [r1, r2]
 			
 					
-			;disable digital for E3
+			;disable digital 
 			LDR		r2, =GPIO_DEN
 			LDR		r0, [r1, r2]
 			BIC		r0, #0x0f
@@ -60,11 +59,9 @@ adc_init	PROC
 			ldr		r1, =ADC0_BASE
 			;disable sequence2 sampler for conf
 			ldr		r2, =ADCACTSS
-			ldr		r0, [r1,r2]
+			ldr		r0, [r1]
 			bic		r0, #0x04
-			str		r0, [r1,r2]
-			
-
+			str		r0, [r1]
 			
 			;conf software triggering sample start
 			ldr		r2, =ADCEMUX
@@ -79,13 +76,13 @@ adc_init	PROC
 			
 			;enable interrupt and set end0 bit
 			ldr		r2, =ADCSSCTL2
-			ldr		r0, [r1,r2]
+			;ldr		r0, [r1,r2]
 			mov		r0, #0x6000
 			str		r0, [r1,r2]
 			
-			;125ksps
+			;500ksps
 			ldr		r2, =ADCPC
-			mov		r0, #0x01
+			mov		r0, #0x05
 			str		r0, [r1,r2]
 			
 			ldr		r2, =ADCIM
@@ -118,13 +115,120 @@ adc_init	PROC
 			ldr		r1, =MIC_SAMPLE_OFSET_ADDR
 			mov		r0, #0x0
 			str		r0, [r1]
+			
+			MOV		R0, #0
+			LDR		R1, =LOW_FREQ_TH_ADDR_POT1_SUM
+			STR		R0, [R1]
+			LDR		R1,=HIGH_FREQ_TH_ADDR_POT2_SUM	
+			STR		R0, [R1]
+			LDR		R1,= AMP_TH_ADDR_POT3_SUM
+			STR		R0, [R1]		
+		
 			pop		{r0-r2}
 			bx 		lr
 			ENDP
-;read				
-adc_read	PROC
-
-			ENDP
+;config SS3 for sampling threshold adjustment pots
+adc_pot_init	PROC
+		PUSH	{r0-r2}
+		ldr		r1, =ADC0_BASE
+		;disable sequence3 sampler for conf
+		ldr		r2, =ADCACTSS
+		ldr		r0, [r1]
+		bic		r0, #0x08
+		str		r0, [r1]
+		
+		;conf software triggering sample start
+		ldr		r2, =ADCEMUX
+		str		r0, [r1,r2]
+		bic		r0, #0xF000
+		str		r0, [r1,r2]
+		
+		; ain1, ain2, ain3 
+		ldr		r2, =ADCSSMUX3
+		mov32	r0, #0x1
+		str		r0, [r1,r2]
+		
+		;enable interrupt and set end0 bit
+		ldr		r2, =ADCSSCTL3
+		;ldr		r0, [r1,r2]
+		mov		r0, #0x0006
+		str		r0, [r1,r2]
+	
+		
+		ldr		r2, =ADCIM
+		ldr		r0, [r1,r2]
+		orr		r0, #0x08
+		str		r0, [r1,r2]
+			
+		;enable adC
+		ldr		r1, =ADC0_BASE
+		ldr		r2, =ADCACTSS
+		ldr		r0, [r1,r2]
+		orr		r0, #0x08
+		str		r0, [r1,r2]
+	
+		POP		{r0-r2}
+		BX	LR
+		ENDP
+;******************************************************************
+;read pots by one by. change input then read, change input then read
+;@param: r3 input channel (1-2-3)
+adc_read_pot PROC
+		PUSH	{R0-R2}
+		ldr		r1, =ADC0_BASE
+			;disable sequence3 sampler for conf
+		ldr		r2, =ADCACTSS
+		ldr		r0, [r1]
+		bic		r0, #0x08
+		str		r0, [r1]		
+		; ain1 
+		ldr		r2, =ADCSSMUX3
+		mov		r0,	#1
+		sub		r3, #1
+		lsl		r0,	r3
+		str		r0, [r1,r2]
+		
+		ldr		r2, =ADCACTSS
+		ldr		r0, [r1]
+		mov		r0, #0x08
+		str		r0, [r1]
+		
+startPot ldr	r2, =ADCPSSI
+		ldr		r0, [r0,r1]
+		orr		r0, #0x08
+		str		r0, [r0,r1]
+		
+		;wait for conversion complete
+		ldr		r2, =ADCRIS
+pollRis	ldr		r0, [r1,r2]
+		and		r0, #0x08
+		cmp		r0, #0x08
+		bne		pollRis
+		
+		;clear interrypt flag
+		ldr		r2, =ADCISC
+		ldr		r0, [r1,r2]
+		bic		r0, #0x08
+		str		r0, [r1,r2]
+		
+		ldr		r2, =ADCSSFIFO3
+		ldr		r0, [r1,r2] ; r2 holds the sampled dat		
+		
+		cmp		r3, #0
+		LDREQ	R1, =LOW_FREQ_TH_ADDR_POT1
+		cmp		r3, #1
+		ldreq	r1, =HIGH_FREQ_TH_ADDR_POT2
+		cmp		r3, #2
+		ldreq	r1, =AMP_TH_ADDR_POT3
+		
+		str		r0, [r1] ; store resust
+		
+		ldr		r1, =ADC0_BASE
+		MOV		R0,0X04
+		STR		R0, [R1]
+		POP		{R0-R2}
+		BX		LR
+		ENDP
 
 adc_isr_handler	PROC
 				ldr		r1, =ADC0_BASE
@@ -135,24 +239,15 @@ adc_isr_handler	PROC
 				str		r0, [r1,r2]
 				
 				ldr		r1, =ADC0_BASE
-				mov		r12, #0 		;read cycle for multiple adc in
 _readFifo		ldr		r2, = ADCSSFIFO2
 				ldr		r0, [r1,r2]		;r0 has 12 bit value 
-				add 	r12, #1
-				cmp		r12, #1
-				beq		_strMic
-				cmp		r12, #2
-				beq		_strPot1
-				cmp		r12, #3
-				beq		_strPot2
-				cmp		r12, #4
-				bne		_readFifo
-				mov		r12, #0 
-				b		_strPot3
-				b		done
+				
+				
 _strMic			ldr		r2, =MIC_ADC_OFFSET
 				sub		r0, r2
 				lsl		r0, #4
+				ldr		r2, =0xffff0000
+				bic		r0, r2
 				ldr		r2, =MIC_SAMPLE_DATA_ADDR;
 				str		r0, [r2,r11] ;store value
 				
@@ -160,16 +255,30 @@ _strMic			ldr		r2, =MIC_ADC_OFFSET
 				cmp		r11, #0x400
 				moveq	r11, #0
 				moveq	r10, #1
-				b		_readFifo
-_strPot1		ldr		r2, =POT1_SAMPLE_ADDR
-				str		r0, [r2]
-				b		_readFifo
-_strPot2		ldr		r2, =POT2_SAMPLE_ADDR
-				str		r0, [r2]
-				b		_readFifo
-_strPot3		ldr		r2, =POT3_SAMPLE_ADDR
-				str		r0, [r2]
-				b		done
+				
+				ldr		r1, =ADC0_BASE
+				ldr		r2, = ADCSSFIFO2
+_strPot1		ldr		r0, [r1,r2]
+				lsr		r0, #2
+				ldr		r3, =LOW_FREQ_TH_ADDR_POT1_SUM
+				ldr		r12, [r3]
+				add		r0, r12
+				str		r0, [r3]
+				
+				ldr		r0, [r1,r2]
+_strPot2		lsr		r0, #2
+				ldr		r3, =HIGH_FREQ_TH_ADDR_POT2_SUM
+				ldr		r12, [r3]
+				add		r0, r12
+				str		r0, [r3]
+				
+				ldr		r0, [r1,r2]
+_strPot3		lsr		r0, #2
+				ldr		r3, =AMP_TH_ADDR_POT3_SUM
+				ldr		r12, [r3]
+				add		r0, r12
+				str		r0, [r3]
+				
 done			bx	lr		
 			ENDP
 
